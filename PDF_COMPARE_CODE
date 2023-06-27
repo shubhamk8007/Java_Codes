@@ -1,0 +1,135 @@
+import org.apache.pdfbox.pdmodel.PDDocument;
+import org.apache.pdfbox.pdmodel.PDPage;
+import org.apache.pdfbox.pdmodel.common.PDRectangle;
+import org.apache.pdfbox.pdmodel.PDPageContentStream;
+import org.apache.pdfbox.text.PDFTextStripper;
+
+import java.awt.Color;
+import java.io.IOException;
+import java.io.File;
+
+public class PdfCompareTool {
+
+    public static void main(String[] args) {
+        String inputFile1 = "input1.pdf";
+        String inputFile2 = "input2.pdf";
+        String outputFile = "output.pdf";
+
+        try {
+            // Load the PDF documents
+            PDDocument document1 = PDDocument.load(new File(inputFile1));
+            PDDocument document2 = PDDocument.load(new File(inputFile2));
+
+            // Convert the PDF documents to text
+            PDFTextStripper stripper = new PDFTextStripper();
+            String text1 = stripper.getText(document1);
+            String text2 = stripper.getText(document2);
+
+            // Compare the texts
+            if (text1.equals(text2)) {
+                System.out.println("Both PDFs are exactly the same.");
+            } else {
+                // Create a new document for highlighting the differences
+                PDDocument outputDocument = new PDDocument();
+
+                // Add pages to the output document
+                int numPages = Math.max(document1.getNumberOfPages(), document2.getNumberOfPages());
+                for (int i = 0; i < numPages; i++) {
+                    PDPage page1 = document1.getPage(i);
+                    PDPage page2 = document2.getPage(i);
+                    PDPage outputPage = new PDPage(page1.getMediaBox());
+                    outputDocument.addPage(outputPage);
+
+                    // Highlight the differences on the output page
+                    highlightDifferences(page1, page2, outputPage);
+                }
+
+                // Save the output document
+                outputDocument.save(outputFile);
+                outputDocument.close();
+                System.out.println("Differences highlighted and saved in " + outputFile);
+            }
+
+            // Close the input documents
+            document1.close();
+            document2.close();
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+    }
+
+    private static void highlightDifferences(PDPage page1, PDPage page2, PDPage outputPage) throws IOException {
+        PDPageContentStream contentStream = new PDPageContentStream(outputPage);
+        contentStream.setNonStrokingColor(Color.YELLOW);
+
+        // Compare the content streams of the two pages
+        PDRectangle mediaBox = page1.getMediaBox();
+        PDRectangle cropBox = page1.getCropBox();
+        PDRectangle mediaBox2 = page2.getMediaBox();
+        PDRectangle cropBox2 = page2.getCropBox();
+        PDRectangle outputMediaBox = outputPage.getMediaBox();
+        PDRectangle outputCropBox = outputPage.getCropBox();
+
+                // Adjust coordinates based on the different page boxes
+        float offsetX = cropBox.getLowerLeftX() - mediaBox.getLowerLeftX();
+        float offsetY = cropBox.getLowerLeftY() - mediaBox.getLowerLeftY();
+        float offsetX2 = cropBox2.getLowerLeftX() - mediaBox2.getLowerLeftX();
+        float offsetY2 = cropBox2.getLowerLeftY() - mediaBox2.getLowerLeftY();
+        float offsetXOutput = outputCropBox.getLowerLeftX() - outputMediaBox.getLowerLeftX();
+        float offsetYOutput = outputCropBox.getLowerLeftY() - outputMediaBox.getLowerLeftY();
+
+        // Start comparing the content streams of the pages
+        PDFTextStripper stripper1 = new PDFTextStripper();
+        stripper1.setStartPage(page1.getStructParents() + 1);
+        stripper1.setEndPage(page1.getStructParents() + 1);
+        String text1 = stripper1.getText(page1);
+
+        PDFTextStripper stripper2 = new PDFTextStripper();
+        stripper2.setStartPage(page2.getStructParents() + 1);
+        stripper2.setEndPage(page2.getStructParents() + 1);
+        String text2 = stripper2.getText(page2);
+
+        String[] lines1 = text1.split("\\r?\\n");
+        String[] lines2 = text2.split("\\r?\\n");
+
+        int maxLines = Math.max(lines1.length, lines2.length);
+
+        // Iterate over the lines of the page
+        for (int lineIndex = 0; lineIndex < maxLines; lineIndex++) {
+            if (lineIndex < lines1.length && lineIndex < lines2.length) {
+                String line1 = lines1[lineIndex];
+                String line2 = lines2[lineIndex];
+
+                // Compare the lines
+                if (!line1.equals(line2)) {
+                    // Highlight the difference on the output page
+                    float y1 = mediaBox.getUpperRightY() - (lineIndex * 10) + offsetYOutput;
+                    float y2 = mediaBox.getUpperRightY() - ((lineIndex + 1) * 10) + offsetYOutput;
+                    float x1 = mediaBox.getLowerLeftX() + offsetXOutput;
+                    float x2 = mediaBox.getUpperRightX() + offsetXOutput;
+
+                    contentStream.fillRect(x1, y1, x2 - x1, y2 - y1);
+                }
+            } else if (lineIndex < lines1.length) {
+                // Highlight the entire line from the first document
+                float y1 = mediaBox.getUpperRightY() - (lineIndex * 10) + offsetYOutput;
+                float y2 = mediaBox.getUpperRightY() - ((lineIndex + 1) * 10) + offsetYOutput;
+                float x1 = mediaBox.getLowerLeftX() + offsetXOutput;
+                float x2 = mediaBox.getUpperRightX() + offsetXOutput;
+
+                contentStream.fillRect(x1, y1, x2 - x1, y2 - y1);
+            } else if (lineIndex < lines2.length) {
+                // Highlight the entire line from the second document
+                float y1 = mediaBox.getUpperRightY() - (lineIndex * 10) + offsetYOutput;
+                float y2 = mediaBox.getUpperRightY() - ((lineIndex + 1) * 10) + offsetYOutput;
+                float x1 = mediaBox.getLowerLeftX() + offsetXOutput;
+                float x2 = mediaBox.getUpperRightX() + offsetXOutput;
+
+                contentStream.fillRect(x1, y1, x2 - x1, y2 - y1);
+            }
+        }
+
+        contentStream.close();
+    }
+}
+
